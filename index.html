@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#28a745"> <!-- Repete a theme-color para consistência -->
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lista de Compras - Persistente</title>
+    <style>
+        /* Estilos CSS (mantidos da versão anterior) */
+        body { font-family: sans-serif; padding: 20px; }
+        #area-adicionar { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+        #area-adicionar input { padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
+        #area-adicionar button { padding: 8px 15px; background-color: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        #lista-compras { list-style: none; padding: 0; margin: 0; }
+        #lista-compras li { display: flex; align-items: center; gap: 10px; padding: 10px 5px; border-bottom: 1px solid #eee; transition: opacity 0.3s, background-color 0.3s; }
+        #lista-compras input[type="checkbox"] { transform: scale(1.3); cursor: pointer; flex-shrink: 0; margin-right: 8px; }
+        .item-info { flex-grow: 1; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+        .item-info span.editable { cursor: pointer; padding: 2px 4px; border-radius: 3px; transition: background-color 0.2s; }
+        .item-info span.editable:hover { background-color: #f0f0f0; }
+        .item-info .item-texto { font-weight: bold; } .item-info .item-quantidade { color: #555; font-size: 0.9em; } .item-info .item-preco-unit { font-size: 0.8em; color: #6c757d; font-style: italic; }
+        .item-preco-total { font-weight: bold; margin-left: auto; color: #007bff; white-space: nowrap; padding-left: 10px; }
+        .remove-btn { background-color: #dc3545; color: white; border: none; padding: 4px 8px; border-radius: 3px; cursor: pointer; font-size: 0.8em;}
+        #total-area { margin-top: 20px; text-align: right; font-size: 1.2em; font-weight: bold; }
+        input.edit-field { padding: 3px; font-size: inherit; font-family: inherit; border: 1px solid #999; border-radius: 3px; margin-right: 5px; box-sizing: border-box; }
+        input.edit-field.nome { min-width: 100px; flex-grow: 1; } input.edit-field.qtd { width: 80px; } input.edit-field.preco { width: 80px; }
+        li.item-comprado { opacity: 0.6; } .item-comprado .item-info { text-decoration: line-through; color: grey; } .item-comprado .item-preco-total { text-decoration: line-through; color: grey; } .item-comprado input.edit-field { text-decoration: none; opacity: 1; color: initial; }
+    </style>
+</head>
+<body>
+    <h1>Lista de Compras - Persistente</h1>
+    <div id="area-adicionar">
+        <input type="text" id="novo-nome" placeholder="Nome do Item">
+        <input type="text" id="novo-qtd" placeholder="Quantidade">
+        <input type="number" id="novo-preco" placeholder="Preço Unit." step="0.01" min="0">
+        <button id="btn-adicionar" onclick="adicionar()">Adicionar</button>
+    </div>
+    <ul id="lista-compras"></ul>
+    <div id="total-area"> Total Geral: <span id="total-geral">R$ 0,00</span> </div>
+
+    <script>
+        const listaUL = document.getElementById('lista-compras');
+        const inputNome = document.getElementById('novo-nome');
+        const inputQtd = document.getElementById('novo-qtd');
+        const inputPreco = document.getElementById('novo-preco');
+        const spanTotalGeral = document.getElementById('total-geral');
+        const btnAdicionar = document.getElementById('btn-adicionar');
+        let editandoInput = null;
+        const STORAGE_KEY = 'minhaListaComprasPersistente_v1'; // Chave do Storage
+        let listaItens = []; // Array para guardar os dados da lista
+        let adicionando = false;
+
+        // --- Funções Auxiliares e Cálculo (Mantidas) ---
+        const formatarMoeda = (valor) => (typeof valor === 'number' && isFinite(valor)) ? valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : 'R$ 0,00';
+        const parseLocalFloat = (str) => (typeof str === 'string' && str.trim() !== '') ? (parseFloat(str.replace(',', '.')) || NaN) : NaN;
+        const parseQuantidade = (str) => (str && !isNaN(parseFloat(str.replace(',', '.'))) && parseFloat(str.replace(',', '.')) > 0) ? parseFloat(str.replace(',', '.')) : 1;
+        const calcularItemTotal = (qtdNum, precoUnit) => (Number(qtdNum) || 1) * (Number(precoUnit) || 0);
+
+        // --- localStorage ---
+        function salvarLista() {
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(listaItens));
+                console.log("Lista salva no localStorage.");
+            } catch (e) {
+                console.error("Erro ao salvar lista no localStorage:", e);
+            }
+        }
+
+        function carregarLista() {
+            const dadosSalvos = localStorage.getItem(STORAGE_KEY);
+            if (dadosSalvos) {
+                try {
+                    listaItens = JSON.parse(dadosSalvos);
+                     console.log("Lista carregada do localStorage:", listaItens);
+                } catch(e) {
+                    console.error("Erro ao parsear lista do localStorage:", e);
+                    listaItens = []; // Reseta se dados corrompidos
+                    localStorage.removeItem(STORAGE_KEY); // Limpa storage corrompido
+                }
+            } else {
+                listaItens = []; // Começa vazia se não houver nada salvo
+                console.log("Nenhuma lista salva encontrada.");
+            }
+             renderizarLista(); // Renderiza a lista carregada (ou vazia)
+        }
+
+        // --- Renderização e Total ---
+        function renderizarLista() {
+            console.log("Renderizando lista...");
+            listaUL.innerHTML = ''; // Limpa a UL
+            let totalGeralCalculado = 0;
+
+            listaItens.forEach(item => {
+                 // Calcula total do item ANTES de criar o HTML
+                 const itemTotal = calcularItemTotal(item.qtdNum, item.precoUnitario);
+                 totalGeralCalculado += itemTotal; // Acumula no total geral
+
+                 // Cria o elemento LI
+                 const novoLi = document.createElement('li');
+                 novoLi.dataset.id = item.id;
+                 novoLi.dataset.nome = item.nome; // Guarda dados importantes
+                 novoLi.dataset.qtd = item.qtdNum.toString();
+                 novoLi.dataset.preco = item.precoUnitario.toString();
+                 novoLi.dataset.comprado = String(item.comprado); // Guarda estado comprado
+                 if (item.comprado) novoLi.classList.add('item-comprado');
+
+                 // Monta o HTML interno (com checkbox e spans editáveis)
+                 novoLi.innerHTML = `
+                    <input type="checkbox" ${item.comprado ? 'checked' : ''} onchange="toggleComprado('${item.id}', this.checked)" aria-label="Marcar ${item.nome}">
+                    <div class="item-info">
+                        <span class="item-texto editable" onclick="iniciarEdicao(this, 'nome')">${item.nome}</span>
+                        <span class="item-quantidade editable" onclick="iniciarEdicao(this, 'qtd')">(${item.qtdTexto})</span>
+                        <span class="item-preco-unit editable" onclick="iniciarEdicao(this, 'preco')">(@ ${formatarMoeda(item.precoUnitario)}/un)</span>
+                        <span class="item-preco-total">${formatarMoeda(itemTotal)}</span>
+                    </div>
+                    <button class="remove-btn" onclick="remover('${item.id}')">Remover</button>
+                 `;
+                 listaUL.appendChild(novoLi);
+            });
+
+             // Atualiza o display do total geral
+            spanTotalGeral.textContent = formatarMoeda(totalGeralCalculado);
+             console.log("Renderização completa. Total Geral:", formatarMoeda(totalGeralCalculado));
+        }
+
+        // --- Ações ---
+        function adicionar() {
+            if (adicionando) return; adicionando = true; btnAdicionar.disabled = true;
+            const nome = inputNome.value.trim(); const qtdTexto = inputQtd.value.trim() || '1'; const precoTexto = inputPreco.value.trim();
+            if (!nome) { alert('Digite o nome.'); inputNome.focus(); adicionando = false; btnAdicionar.disabled = false; return; }
+            const qtdNum = parseQuantidade(qtdTexto); if (qtdNum <= 0) { alert('Quantidade > 0.'); inputQtd.focus(); adicionando = false; btnAdicionar.disabled = false; return; }
+            let precoNum = parseLocalFloat(precoTexto) || 0; if (precoNum < 0) precoNum = 0;
+
+            // Cria o objeto do novo item
+            const novoItem = {
+                id: Date.now().toString(), nome: nome, qtdTexto: qtdTexto, qtdNum: qtdNum,
+                precoUnitario: precoNum, comprado: false, locked: false // Adiciona locked aqui se/quando necessário
+            };
+
+            listaItens.push(novoItem); // Adiciona ao array de dados
+            salvarLista(); // Salva o array atualizado
+            renderizarLista(); // Redesenha a lista a partir do array atualizado
+
+            inputNome.value = ''; inputQtd.value = ''; inputPreco.value = ''; inputNome.focus();
+            setTimeout(() => { adicionando = false; btnAdicionar.disabled = false; }, 100);
+        }
+
+        function remover(id) {
+            const itemIndex = listaItens.findIndex(item => item.id === id);
+            if (itemIndex === -1) return; // Item não encontrado
+
+            const item = listaItens[itemIndex];
+            if (item.comprado) { // Verifica se está marcado
+                 alert("Item marcado como comprado. Desmarque-o para poder remover.");
+                 return;
+            }
+            // Se adicionarmos trava, verificaríamos aqui: if (item.locked) { alert("Item travado..."); return; }
+
+            if (confirm(`Remover "${item.nome || 'item'}"?`)) {
+                listaItens.splice(itemIndex, 1); // Remove do array de dados
+                salvarLista();
+                renderizarLista();
+            }
+        }
+
+        function toggleComprado(id, isChecked) {
+             const itemIndex = listaItens.findIndex(item => item.id === id);
+             if (itemIndex > -1) {
+                 listaItens[itemIndex].comprado = isChecked; // Atualiza o estado no array
+                 salvarLista();
+                 // Opcional: Apenas atualiza a classe CSS sem redesenhar tudo para performance
+                 const li = listaUL.querySelector(`li[data-id="${id}"]`);
+                 if(li) li.classList.toggle('item-comprado', isChecked);
+                 // Se quiser redesenhar tudo: renderizarLista();
+             }
+        }
+
+        // --- Edição Inline (Modificada para operar no array listaItens) ---
+        function iniciarEdicao(spanClicado, tipoCampo) {
+            if (editandoInput) { editandoInput.blur(); if (document.body.contains(editandoInput)) return; }
+            const liPai = spanClicado.closest('li'); if (!liPai) return;
+            const idItem = liPai.dataset.id;
+            const item = listaItens.find(i => i.id === idItem); // Encontra o item no array
+            if (!item) return;
+            // Se adicionarmos trava: if (item.locked) return;
+
+            elementoEmEdicao = spanClicado;
+            let valorAtual = ''; let inputType = 'text'; let inputClass = `edit-field ${tipoCampo}`;
+            if (tipoCampo === 'nome') valorAtual = item.nome;
+            else if (tipoCampo === 'qtd') valorAtual = item.qtdTexto; // Edita o texto original
+            else if (tipoCampo === 'preco') { valorAtual = item.precoUnitario.toString(); inputType = 'number'; } // Edita o valor numérico
+
+            const input = document.createElement('input'); input.type = inputType;
+            if (inputType === 'number') { input.step = '0.01'; input.min = '0'; }
+            input.className = inputClass; input.value = valorAtual;
+            input.style.width = spanClicado.offsetWidth + 20 + 'px'; // Tenta ajustar
+
+            const finalizar = (salvar) => {
+                 if (!elementoEmEdicao) return; const inputAtual = editandoInput; // Usa a referência global
+                 if(!inputAtual) { elementoEmEdicao = null; return; }
+
+                 if (salvar) {
+                     const novoValor = inputAtual.value.trim();
+                     const itemIndex = listaItens.findIndex(i => i.id === idItem);
+                     if (itemIndex > -1) {
+                          let precisaSalvar = false;
+                          if (tipoCampo === 'nome' && novoValor) { listaItens[itemIndex].nome = novoValor; precisaSalvar = true;}
+                          else if (tipoCampo === 'qtd') { const qtdNum = parseQuantidade(novoValor); if(qtdNum > 0) { listaItens[itemIndex].qtdTexto = novoValor || '1'; listaItens[itemIndex].qtdNum = qtdNum; precisaSalvar = true;} else { alert("Quantidade > 0");}}
+                          else if (tipoCampo === 'preco') { const precoNum = parseLocalFloat(novoValor); if (!isNaN(precoNum) && precoNum >= 0) { listaItens[itemIndex].precoUnitario = precoNum; precisaSalvar = true;} else { alert('Preço inválido!'); } }
+
+                          if(precisaSalvar) {
+                               salvarLista(); // Salva os dados atualizados
+                               renderizarLista(); // Redesenha TUDO com os novos dados
+                          } else {
+                              // Se não salvou, restaura o span original
+                              spanOriginal.style.display = ''; inputAtual.remove();
+                          }
+                     }
+                 } else { // Cancelou
+                     spanOriginal.style.display = ''; inputAtual.remove();
+                 }
+                 editandoInput = null; elementoEmEdicao = null;
+             };
+
+            spanClicado.style.display = 'none'; spanClicado.parentNode.insertBefore(input, spanClicado);
+            editandoInput = input; input.focus(); input.select();
+            input.onblur = () => finalizar(true); input.onkeydown = (e) => { if (e.key === 'Enter') finalizar(true); else if (e.key === 'Escape') finalizar(false); };
+        }
+
+        // --- Inicialização ---
+        document.addEventListener('DOMContentLoaded', carregarLista); // Carrega e renderiza ao iniciar
+
+    </script>
+        <script>
+            // Registra o Service Worker
+            if ('serviceWorker' in navigator) {
+              window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js') // Caminho para seu SW
+                  .then(registration => {
+                    console.log('Service Worker registrado com sucesso:', registration.scope);
+                  })
+                  .catch(error => {
+                    console.error('Falha ao registrar o Service Worker:', error);
+                  });
+              });
+            }
+          </script>
+</body>
+</html>
