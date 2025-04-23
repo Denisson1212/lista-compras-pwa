@@ -25,6 +25,83 @@
         input.edit-field { padding: 3px; font-size: inherit; font-family: inherit; border: 1px solid #999; border-radius: 3px; margin-right: 5px; box-sizing: border-box; }
         input.edit-field.nome { min-width: 100px; flex-grow: 1; } input.edit-field.qtd { width: 80px; } input.edit-field.preco { width: 80px; }
         li.item-comprado { opacity: 0.6; } .item-comprado .item-info { text-decoration: line-through; color: grey; } .item-comprado .item-preco-total { text-decoration: line-through; color: grey; } .item-comprado input.edit-field { text-decoration: none; opacity: 1; color: initial; }
+    /* --- Media Query para Telas Pequenas (Ex: Celulares) --- */
+@media (max-width: 600px) { /* Aplica estas regras quando a largura da tela for 600px ou menos */
+
+body {
+    padding: 10px; /* Reduz padding geral no celular */
+}
+
+.container {
+    padding: 15px; /* Reduz padding interno do container */
+}
+
+h1 {
+    font-size: 1.5em; /* Reduz um pouco o título */
+    margin-bottom: 20px;
+}
+
+/* Ajustes na Área de Adicionar */
+#area-adicionar {
+    flex-direction: column; /* Empilha os inputs e botão verticalmente */
+    gap: 12px; /* Ajusta o espaçamento vertical */
+}
+
+#area-adicionar input,
+#area-adicionar button {
+    width: 100%; /* Faz cada input/botão ocupar a largura total */
+    box-sizing: border-box; /* Garante que padding não aumente a largura total */
+}
+
+/* Ajustes nos Itens da Lista */
+#lista-compras li {
+    flex-wrap: wrap; /* Permite que os elementos internos (info, actions) quebrem linha */
+    gap: 8px; /* Ajusta espaçamento quando quebrar linha */
+}
+
+.item-info {
+    /* Garante que as informações ocupem quase toda a largura antes dos botões */
+    /* Pode remover min-width se causar problemas */
+    /* min-width: calc(100% - 80px); /* Exemplo: deixa espaço para botões */
+    order: 1; /* Garante que a info venha antes das ações se quebrar */
+    gap: 5px 8px; /* Ajusta espaçamento interno da info */
+}
+
+ /* Faz o preço total ficar abaixo das outras infos se quebrar */
+ .item-preco-total {
+     margin-left: 0; /* Remove margem automática */
+     width: 100%; /* Ocupa linha própria se quebrar */
+     text-align: right; /* Mantém alinhado à direita */
+     padding-top: 5px; /* Espaço acima */
+     color: #333; /* Cor um pouco mais escura para destaque */
+ }
+ /* Esconde o preço unitário em telas muito pequenas (opcional) */
+ /*
+ .item-preco-unit {
+      display: none;
+ }
+ */
+
+.item-actions {
+    order: 2; /* Garante que as ações venham depois da info se quebrar */
+    margin-left: 0; /* Remove margem automática */
+    width: 100%; /* Faz botões ocuparem largura se quebrar */
+    justify-content: flex-end; /* Alinha botões à direita */
+}
+
+#total-area {
+    font-size: 1.1em; /* Reduz um pouco o total geral */
+    padding: 12px;
+}
+}
+
+/* Ajuste adicional para telas muito estreitas, se necessário */
+@media (max-width: 380px) {
+ .item-info .item-texto {
+     min-width: 70px; /* Reduz largura mínima do nome */
+ }
+ /* Poderia reduzir ainda mais fontes ou esconder detalhes aqui */
+}
     </style>
 </head>
 <body>
